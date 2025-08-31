@@ -1,7 +1,6 @@
 Flask==3.1.2
-Werkzeug==2.3.7
+Werkzeug==3.1.2
 pandas==2.1.0
-openpyxl==3.1.2          # Para que pandas pueda exportar a Excel
-xlrd==2.0.1              # Para leer archivos Excel si es necesario
-email-validator==2.0.0    # Para validación de correos (opcional)
-
+openpyxl==3.1.2
+xlrd==2.0.1
+email-validator==2.0.0
