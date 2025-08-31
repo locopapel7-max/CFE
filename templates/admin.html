@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Administrador</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background: rgba(255,255,255,0.9);
+            color: black;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: linear-gradient(135deg, #FFD700, #FFC107);
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: rgba(255, 215, 0, 0.2);
+        }
+        img.thumb {
+            width: 50px;
+            height: auto;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .hidden { display: none; }
+        button { margin: 5px; }
+        /* Modal para contraseña e imagen grande */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #fff;
+            max-width: 500px;
+            margin: 80px auto;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            position: relative;
+        }
+        .modal-content img { max-width: 100%; height: auto; }
+        .modal-content button { margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <h1>Panel Administrador</h1>
+    <header style="display: flex; align-items: center; padding: 0px;">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="width:100px; position:absolute; top:10px; left:10px;">
+    </header>
+
+    <div>
+        <button onclick="showUsuarios()">Usuarios</button>
+        <button onclick="showReembolsos()">Reembolsos</button>
+    </div>
+
+    <!-- Contenedores -->
+    <div id="usuariosContainer" class="hidden">
+        <h2>Usuarios Registrados</h2>
+        <button onclick="filterUsuarios('comisionista')">Comisionistas</button>
+        <button onclick="filterUsuarios('agentes_comerciales')">Agentes Comerciales</button>
+        <div id="usuariosTable"></div>
+    </div>
+
+    <div id="reembolsosContainer" class="hidden">
+        <h2>Reembolsos</h2>
+        <div id="reembolsosTable"></div>
+    </div>
+
+    <!-- Modal contraseña -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <h3>Ingresar contraseña</h3>
+            <input type="password" id="password" placeholder="Contraseña" style="width:100%; padding:8px;">
+            <div style="margin-top:10px; text-align:right;">
+                <button onclick="checkPassword()">Confirmar</button>
+                <button onclick="closePasswordForm()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal imagen grande -->
+    <div id="imageModal" class="modal">
+        <div class="modal-content">
+            <img id="modalImg" src="">
+            <br>
+            <button onclick="closeImageModal()">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const usuarios = {{ usuarios | tojson | safe }};
+        const reembolsos = {{ reembolsos | tojson | safe }};
+        let reembolsoIdToAuthorize = null;
+
+        function showUsuarios() {
+            document.getElementById('usuariosContainer').classList.remove('hidden');
+            document.getElementById('reembolsosContainer').classList.add('hidden');
+            document.getElementById('usuariosTable').innerHTML = '';
+        }
+
+        function showReembolsos() {
+            document.getElementById('reembolsosContainer').classList.remove('hidden');
+            document.getElementById('usuariosContainer').classList.add('hidden');
+            renderReembolsosTable();
+        }
+
+        function filterUsuarios(tipo) {
+            let filtered = usuarios.filter(u => 
+                (tipo === 'comisionista' && u.type === 'Comisionista') || 
+                (tipo === 'agentes_comerciales' && u.type === 'Agente Comercial')
+            );
+
+            let html = `<table>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Nombre</th>
+                                <th>Email</th>
+                                <th>Extra</th>
+                                <th>INE</th>
+                            </tr>`;
+            filtered.forEach(u => {
+                let ineImg = u.ine_file ? `<img class="thumb" src="{{ url_for('static', filename='uploads/${u.ine_file}') }}" alt="INE" onclick="showImage('${u.ine_file}')">` : 'N/A';
+                html += `<tr>
+                            <td>${u.type}</td>
+                            <td>${u.name}</td>
+                            <td>${u.email}</td>
+                            <td>${u.extra || ''}</td>
+                            <td>${ineImg}</td>
+                        </tr>`;
+            });
+            html += `</table>`;
+            document.getElementById('usuariosTable').innerHTML = html;
+        }
+
+        function renderReembolsosTable() {
+            let html = `<table>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Email</th>
+                                <th>Razón</th>
+                                <th>Monto</th>
+                                <th>INE</th>
+                                <th>Acción</th>
+                            </tr>`;
+            reembolsos.forEach(r => {
+                let ineImg = r.ine_file ? `<img class="thumb" src="{{ url_for('static', filename='uploads/${r.ine_file}') }}" onclick="showImage('${r.ine_file}')">` : 'N/A';
+                html += `<tr>
+                            <td>${r.name}</td>
+                            <td>${r.email}</td>
+                            <td>${r.reason}</td>
+                            <td>$${r.amount}</td>
+                            <td>${ineImg}</td>
+                            <td>${r.authorized ? 'Autorizado' : `<button onclick="openPasswordModal(${r.id})">Autorizar</button>`}</td>
+                        </tr>`;
+            });
+            html += `</table>`;
+            document.getElementById('reembolsosTable').innerHTML = html;
+        }
+
+        function openPasswordModal(id) {
+            reembolsoIdToAuthorize = id;
+            document.getElementById('passwordModal').style.display = 'block';
+        }
+
+        function closePasswordForm() {
+            document.getElementById('passwordModal').style.display = 'none';
+        }
+
+        function checkPassword() {
+            const password = document.getElementById('password').value;
+            fetch(`/authorize_reembolso/${reembolsoIdToAuthorize}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password })
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                alert(data.message);
+                if(data.success){
+                    closePasswordForm();
+                    renderReembolsosTable();
+                }
+            })
+            .catch(err => console.error(err));
+        }
+
+        function showImage(filename) {
+            document.getElementById('modalImg').src = "{{ url_for('static', filename='uploads/') }}" + filename;
+            document.getElementById('imageModal').style.display = 'block';
+        }
+
+        function closeImageModal() {
+            document.getElementById('imageModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
+
